@@ -1,27 +1,280 @@
 """
-JobTracker Flask API
-Manages job application tracking data
+JobTracker Flask API with JWT Authentication
+Manages job application tracking data with user authentication
 """
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from models import db, Application
-from datetime import datetime
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_mail import Mail, Message
+from models import db, User, Application, PasswordResetToken
+from datetime import datetime, timedelta
 import os
 
 app = Flask(__name__)
 CORS(app)
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///jobtracker.db')
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///jobtracker.db')
+# Fix for Render PostgreSQL URLs (postgres:// -> postgresql://)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize database
+# JWT configuration
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+
+# Email configuration (Gmail SMTP)
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME')
+
+# Frontend URL for password reset links
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+
+# Initialize extensions
 db.init_app(app)
+jwt = JWTManager(app)
+mail = Mail(app)
 
 with app.app_context():
     db.create_all()
 
+
+# ============= Authentication Endpoints =============
+
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    try:
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['email', 'password', 'name']
+        for field in required_fields:
+            if field not in data or not data[field]:
+                return jsonify({"success": False, "error": f"Missing required field: {field}"}), 400
+
+        # Check if user already exists
+        if User.query.filter_by(email=data['email'].lower()).first():
+            return jsonify({"success": False, "error": "Email already registered"}), 409
+
+        # Validate password length
+        if len(data['password']) < 6:
+            return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
+
+        # Create new user
+        user = User(
+            email=data['email'].lower(),
+            name=data['name']
+        )
+        user.set_password(data['password'])
+
+        db.session.add(user)
+        db.session.commit()
+
+        # Create access token
+        access_token = create_access_token(identity=user.id)
+
+        return jsonify({
+            "success": True,
+            "user": user.to_dict(),
+            "access_token": access_token
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Login user"""
+    try:
+        data = request.json
+
+        # Validate required fields
+        if not data.get('email') or not data.get('password'):
+            return jsonify({"success": False, "error": "Email and password required"}), 400
+
+        # Find user
+        user = User.query.filter_by(email=data['email'].lower()).first()
+
+        if not user or not user.check_password(data['password']):
+            return jsonify({"success": False, "error": "Invalid email or password"}), 401
+
+        # Create access token
+        access_token = create_access_token(identity=user.id)
+
+        return jsonify({
+            "success": True,
+            "user": user.to_dict(),
+            "access_token": access_token
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/me', methods=['GET'])
+@jwt_required()
+def get_current_user():
+    """Get current user info"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({"success": False, "error": "User not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "user": user.to_dict()
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    """Send password reset email"""
+    try:
+        data = request.json
+        email = data.get('email', '').lower()
+
+        if not email:
+            return jsonify({"success": False, "error": "Email is required"}), 400
+
+        # Find user (always return success to prevent email enumeration)
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+            # Invalidate any existing tokens for this user
+            PasswordResetToken.query.filter_by(user_id=user.id, used=False).update({'used': True})
+
+            # Create new reset token
+            reset_token = PasswordResetToken.create_for_user(user.id)
+            db.session.add(reset_token)
+            db.session.commit()
+
+            # Send email
+            reset_url = f"{FRONTEND_URL}/reset-password?token={reset_token.token}"
+
+            msg = Message(
+                subject="Reset Your JobTracker Password",
+                recipients=[user.email]
+            )
+            msg.html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(to right, #16a34a, #10b981); padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">JobTracker</h1>
+                </div>
+                <div style="padding: 30px; background: #f9fafb;">
+                    <h2 style="color: #374151;">Password Reset Request</h2>
+                    <p style="color: #6b7280;">Hi {user.name},</p>
+                    <p style="color: #6b7280;">We received a request to reset your password. Click the button below to create a new password:</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="{reset_url}" style="background: #16a34a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Reset Password</a>
+                    </div>
+                    <p style="color: #6b7280; font-size: 14px;">This link will expire in 1 hour.</p>
+                    <p style="color: #6b7280; font-size: 14px;">If you didn't request this, you can safely ignore this email.</p>
+                    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+                    <p style="color: #9ca3af; font-size: 12px;">If the button doesn't work, copy and paste this link into your browser:</p>
+                    <p style="color: #9ca3af; font-size: 12px; word-break: break-all;">{reset_url}</p>
+                </div>
+            </div>
+            """
+
+            try:
+                mail.send(msg)
+            except Exception as e:
+                print(f"Failed to send email: {e}")
+                # Don't expose email errors to user
+
+        # Always return success (security: don't reveal if email exists)
+        return jsonify({
+            "success": True,
+            "message": "If an account with that email exists, we've sent a password reset link."
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password using token"""
+    try:
+        data = request.json
+        token = data.get('token')
+        new_password = data.get('password')
+
+        if not token or not new_password:
+            return jsonify({"success": False, "error": "Token and new password are required"}), 400
+
+        if len(new_password) < 6:
+            return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
+
+        # Find and validate token
+        reset_token = PasswordResetToken.query.filter_by(token=token).first()
+
+        if not reset_token:
+            return jsonify({"success": False, "error": "Invalid or expired reset link"}), 400
+
+        if not reset_token.is_valid():
+            return jsonify({"success": False, "error": "Reset link has expired. Please request a new one."}), 400
+
+        # Update password
+        user = User.query.get(reset_token.user_id)
+        user.set_password(new_password)
+
+        # Mark token as used
+        reset_token.used = True
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Password reset successfully. You can now log in with your new password."
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/auth/verify-reset-token', methods=['POST'])
+def verify_reset_token():
+    """Verify if a reset token is valid"""
+    try:
+        data = request.json
+        token = data.get('token')
+
+        if not token:
+            return jsonify({"success": False, "error": "Token is required"}), 400
+
+        reset_token = PasswordResetToken.query.filter_by(token=token).first()
+
+        if not reset_token or not reset_token.is_valid():
+            return jsonify({"success": False, "valid": False, "error": "Invalid or expired reset link"}), 400
+
+        return jsonify({
+            "success": True,
+            "valid": True
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============= Application Endpoints (Protected) =============
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -30,10 +283,12 @@ def health_check():
 
 
 @app.route('/api/applications', methods=['GET'])
+@jwt_required()
 def get_applications():
-    """Get all applications"""
+    """Get all applications for current user"""
     try:
-        applications = Application.query.order_by(Application.date_applied.desc()).all()
+        user_id = get_jwt_identity()
+        applications = Application.query.filter_by(user_id=user_id).order_by(Application.date_applied.desc()).all()
         return jsonify({
             "success": True,
             "applications": [app.to_dict() for app in applications]
@@ -43,10 +298,13 @@ def get_applications():
 
 
 @app.route('/api/applications/<int:id>', methods=['GET'])
+@jwt_required()
 def get_application(id):
     """Get a specific application"""
     try:
-        application = Application.query.get(id)
+        user_id = get_jwt_identity()
+        application = Application.query.filter_by(id=id, user_id=user_id).first()
+
         if not application:
             return jsonify({"success": False, "error": "Application not found"}), 404
 
@@ -59,9 +317,11 @@ def get_application(id):
 
 
 @app.route('/api/applications', methods=['POST'])
+@jwt_required()
 def create_application():
     """Create a new application"""
     try:
+        user_id = get_jwt_identity()
         data = request.json
 
         # Validate required fields
@@ -72,6 +332,7 @@ def create_application():
 
         # Create new application
         application = Application(
+            user_id=user_id,
             company=data['company'],
             position=data['position'],
             status=data['status'],
@@ -96,10 +357,13 @@ def create_application():
 
 
 @app.route('/api/applications/<int:id>', methods=['PUT'])
+@jwt_required()
 def update_application(id):
     """Update an existing application"""
     try:
-        application = Application.query.get(id)
+        user_id = get_jwt_identity()
+        application = Application.query.filter_by(id=id, user_id=user_id).first()
+
         if not application:
             return jsonify({"success": False, "error": "Application not found"}), 404
 
@@ -137,10 +401,13 @@ def update_application(id):
 
 
 @app.route('/api/applications/<int:id>', methods=['DELETE'])
+@jwt_required()
 def delete_application(id):
     """Delete an application"""
     try:
-        application = Application.query.get(id)
+        user_id = get_jwt_identity()
+        application = Application.query.filter_by(id=id, user_id=user_id).first()
+
         if not application:
             return jsonify({"success": False, "error": "Application not found"}), 404
 
@@ -158,10 +425,12 @@ def delete_application(id):
 
 
 @app.route('/api/stats', methods=['GET'])
+@jwt_required()
 def get_statistics():
-    """Get dashboard statistics"""
+    """Get dashboard statistics for current user"""
     try:
-        all_apps = Application.query.all()
+        user_id = get_jwt_identity()
+        all_apps = Application.query.filter_by(user_id=user_id).all()
         total = len(all_apps)
 
         # Count by status
