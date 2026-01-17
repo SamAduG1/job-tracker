@@ -25,6 +25,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # JWT configuration
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+app.config['JWT_HEADER_NAME'] = 'Authorization'
+app.config['JWT_HEADER_TYPE'] = 'Bearer'
 
 # Email configuration (Gmail SMTP)
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -41,6 +44,19 @@ FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 db.init_app(app)
 jwt = JWTManager(app)
 mail = Mail(app)
+
+# JWT error handlers for debugging
+@jwt.invalid_token_loader
+def invalid_token_callback(error_string):
+    return jsonify({"success": False, "error": f"Invalid token: {error_string}"}), 401
+
+@jwt.unauthorized_loader
+def unauthorized_callback(error_string):
+    return jsonify({"success": False, "error": f"Missing token: {error_string}"}), 401
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return jsonify({"success": False, "error": "Token has expired"}), 401
 
 with app.app_context():
     db.create_all()
