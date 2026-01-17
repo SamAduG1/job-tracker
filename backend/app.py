@@ -78,8 +78,8 @@ def register():
         db.session.add(user)
         db.session.commit()
 
-        # Create access token
-        access_token = create_access_token(identity=user.id)
+        # Create access token (identity must be string for Flask-JWT-Extended 4.x)
+        access_token = create_access_token(identity=str(user.id))
 
         return jsonify({
             "success": True,
@@ -108,8 +108,8 @@ def login():
         if not user or not user.check_password(data['password']):
             return jsonify({"success": False, "error": "Invalid email or password"}), 401
 
-        # Create access token
-        access_token = create_access_token(identity=user.id)
+        # Create access token (identity must be string for Flask-JWT-Extended 4.x)
+        access_token = create_access_token(identity=str(user.id))
 
         return jsonify({
             "success": True,
@@ -126,7 +126,7 @@ def login():
 def get_current_user():
     """Get current user info"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
 
         if not user:
@@ -287,7 +287,7 @@ def health_check():
 def get_applications():
     """Get all applications for current user"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         applications = Application.query.filter_by(user_id=user_id).order_by(Application.date_applied.desc()).all()
         return jsonify({
             "success": True,
@@ -302,7 +302,7 @@ def get_applications():
 def get_application(id):
     """Get a specific application"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         application = Application.query.filter_by(id=id, user_id=user_id).first()
 
         if not application:
@@ -321,7 +321,7 @@ def get_application(id):
 def create_application():
     """Create a new application"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         data = request.json
 
         # Validate required fields
@@ -361,7 +361,7 @@ def create_application():
 def update_application(id):
     """Update an existing application"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         application = Application.query.filter_by(id=id, user_id=user_id).first()
 
         if not application:
@@ -405,7 +405,7 @@ def update_application(id):
 def delete_application(id):
     """Delete an application"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         application = Application.query.filter_by(id=id, user_id=user_id).first()
 
         if not application:
@@ -429,7 +429,7 @@ def delete_application(id):
 def get_statistics():
     """Get dashboard statistics for current user"""
     try:
-        user_id = get_jwt_identity()
+        user_id = int(get_jwt_identity())
         all_apps = Application.query.filter_by(user_id=user_id).all()
         total = len(all_apps)
 
