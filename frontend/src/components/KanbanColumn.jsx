@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import KanbanCard from './KanbanCard'
 
-const KanbanColumn = ({ status, applications, onEdit, onDelete, formatDate }) => {
+const KanbanColumn = ({ status, applications, onEdit, onDelete, onFavoriteToggle, formatDate }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   })
@@ -55,6 +55,7 @@ const KanbanColumn = ({ status, applications, onEdit, onDelete, formatDate }) =>
               application={app}
               onEdit={onEdit}
               onDelete={onDelete}
+              onFavoriteToggle={onFavoriteToggle}
               formatDate={formatDate}
             />
           ))

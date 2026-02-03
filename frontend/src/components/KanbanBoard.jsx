@@ -4,7 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import KanbanColumn from './KanbanColumn'
 import KanbanCard from './KanbanCard'
 
-const KanbanBoard = ({ applications, onEdit, onDelete, onStatusUpdate }) => {
+const KanbanBoard = ({ applications, onEdit, onDelete, onStatusUpdate, onFavoriteToggle }) => {
   const [activeId, setActiveId] = useState(null)
 
   const statuses = ['Applied', 'Phone Screen', 'Interview', 'Offer', 'Rejected']
@@ -80,6 +80,7 @@ const KanbanBoard = ({ applications, onEdit, onDelete, onStatusUpdate }) => {
               applications={columns[status]}
               onEdit={onEdit}
               onDelete={onDelete}
+              onFavoriteToggle={onFavoriteToggle}
               formatDate={formatDate}
             />
           </SortableContext>

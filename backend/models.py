@@ -94,6 +94,7 @@ class Application(db.Model):
     location = db.Column(db.String(200), nullable=True)
     salary_range = db.Column(db.String(100), nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    is_favorite = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -109,6 +110,7 @@ class Application(db.Model):
             'location': self.location,
             'salary_range': self.salary_range,
             'notes': self.notes,
+            'is_favorite': self.is_favorite,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

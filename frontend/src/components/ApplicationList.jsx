@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-const ApplicationList = ({ applications, onEdit, onDelete }) => {
+const ApplicationList = ({ applications, onEdit, onDelete, onFavoriteToggle }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
   const [sortField, setSortField] = useState('date_applied')
@@ -49,7 +49,9 @@ const ApplicationList = ({ applications, onEdit, onDelete }) => {
         app.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (app.location && app.location.toLowerCase().includes(searchTerm.toLowerCase()))
 
-      const matchesStatus = statusFilter === 'All' || app.status === statusFilter
+      const matchesStatus =
+        statusFilter === 'All' ||
+        (statusFilter === 'Starred' ? app.is_favorite : app.status === statusFilter)
 
       return matchesSearch && matchesStatus
     })
@@ -143,6 +145,7 @@ const ApplicationList = ({ applications, onEdit, onDelete }) => {
               className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:focus:ring-green-400 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="All">All Statuses</option>
+              <option value="Starred">Starred</option>
               <option value="Applied">Applied</option>
               <option value="Phone Screen">Phone Screen</option>
               <option value="Interview">Interview</option>
@@ -177,6 +180,11 @@ const ApplicationList = ({ applications, onEdit, onDelete }) => {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
+              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-10">
+                <svg className="w-4 h-4 mx-auto text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                </svg>
+              </th>
               <th
                 onClick={() => handleSort('company')}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
@@ -269,7 +277,24 @@ const ApplicationList = ({ applications, onEdit, onDelete }) => {
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredApplications.map((app) => (
-              <tr key={app.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+              <tr key={app.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${app.is_favorite ? 'border-l-4 border-l-yellow-400' : 'border-l-4 border-l-transparent'}`}>
+                <td className="px-3 py-4 text-center">
+                  <button
+                    onClick={() => onFavoriteToggle(app.id)}
+                    className="focus:outline-none transition-transform hover:scale-125"
+                    title={app.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {app.is_favorite ? (
+                      <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-300 dark:text-gray-600 hover:text-yellow-400 dark:hover:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      </svg>
+                    )}
+                  </button>
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div>

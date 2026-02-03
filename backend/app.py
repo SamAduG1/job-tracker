@@ -402,6 +402,8 @@ def update_application(id):
             application.salary_range = data['salary_range']
         if 'notes' in data:
             application.notes = data['notes']
+        if 'is_favorite' in data:
+            application.is_favorite = data['is_favorite']
 
         application.updated_at = datetime.utcnow()
         db.session.commit()
@@ -433,6 +435,30 @@ def delete_application(id):
         return jsonify({
             "success": True,
             "message": "Application deleted successfully"
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/applications/<int:id>/favorite', methods=['PUT'])
+@jwt_required()
+def toggle_favorite(id):
+    """Toggle favorite status of an application"""
+    try:
+        user_id = int(get_jwt_identity())
+        application = Application.query.filter_by(id=id, user_id=user_id).first()
+
+        if not application:
+            return jsonify({"success": False, "error": "Application not found"}), 404
+
+        application.is_favorite = not application.is_favorite
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "application": application.to_dict()
         })
 
     except Exception as e:

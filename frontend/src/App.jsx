@@ -211,6 +211,26 @@ function App() {
     }
   }
 
+  const handleFavoriteToggle = async (id) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/applications/${id}/favorite`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        setApplications(prev =>
+          prev.map(app => app.id === id ? { ...app, is_favorite: data.application.is_favorite } : app)
+        )
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
+  }
+
   const handleFormSubmit = async (formData) => {
     try {
       const url = editingApp
@@ -381,6 +401,7 @@ function App() {
                 applications={applications}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onFavoriteToggle={handleFavoriteToggle}
               />
             ) : (
               <KanbanBoard
@@ -388,6 +409,7 @@ function App() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onStatusUpdate={handleStatusUpdate}
+                onFavoriteToggle={handleFavoriteToggle}
               />
             )}
           </>
