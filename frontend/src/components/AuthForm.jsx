@@ -2,6 +2,21 @@ import { useState } from 'react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      return response
+    } catch (error) {
+      if (attempt < retries - 1) {
+        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)))
+      } else {
+        throw error
+      }
+    }
+  }
+}
+
 const AuthForm = ({ onLogin, onRegister }) => {
   const [mode, setMode] = useState('login') // 'login', 'register', 'forgot'
   const [formData, setFormData] = useState({
@@ -48,7 +63,7 @@ const AuthForm = ({ onLogin, onRegister }) => {
   }
 
   const handleForgotPassword = async () => {
-    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: formData.email })

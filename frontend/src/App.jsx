@@ -8,6 +8,26 @@ import ResetPassword from './components/ResetPassword'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
+/**
+ * Fetch wrapper with retry logic to handle Render cold starts.
+ * Retries on network failures with exponential backoff.
+ */
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      return response
+    } catch (error) {
+      if (attempt < retries - 1) {
+        // Wait with exponential backoff: 1s, 2s, 4s
+        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)))
+      } else {
+        throw error
+      }
+    }
+  }
+}
+
 function App() {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('token'))
@@ -71,7 +91,7 @@ function App() {
 
   const verifyToken = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -81,19 +101,21 @@ function App() {
 
       if (data.success) {
         setUser(data.user)
-      } else {
+      } else if (response.status === 401) {
+        // Only log out if the server explicitly says the token is invalid
         handleLogout()
       }
     } catch (error) {
-      console.error('Error verifying token:', error)
-      handleLogout()
+      // Network error (server unreachable) — keep the user logged in
+      // so they don't lose their session during a cold start
+      console.error('Error verifying token (server may be waking up):', error)
     } finally {
       setLoading(false)
     }
   }
 
   const handleLogin = async (email, password) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
@@ -111,7 +133,7 @@ function App() {
   }
 
   const handleRegister = async (email, password, name) => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name })
@@ -146,7 +168,7 @@ function App() {
 
   const fetchApplications = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/applications`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/applications`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -164,7 +186,7 @@ function App() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/stats`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/stats`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -194,7 +216,7 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/applications/${id}`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/applications/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -213,7 +235,7 @@ function App() {
 
   const handleFavoriteToggle = async (id) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/applications/${id}/favorite`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/applications/${id}/favorite`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -239,7 +261,7 @@ function App() {
 
       const method = editingApp ? 'PUT' : 'POST'
 
-      const response = await fetch(url, {
+      const response = await fetchWithRetry(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -273,7 +295,7 @@ function App() {
       const application = applications.find(app => app.id === id)
       if (!application) return
 
-      const response = await fetch(`${API_BASE_URL}/applications/${id}`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/applications/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

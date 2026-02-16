@@ -2,6 +2,21 @@ import { useState, useEffect } from 'react'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
+async function fetchWithRetry(url, options = {}, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      return response
+    } catch (error) {
+      if (attempt < retries - 1) {
+        await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)))
+      } else {
+        throw error
+      }
+    }
+  }
+}
+
 const ResetPassword = ({ token, onBackToLogin }) => {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -17,7 +32,7 @@ const ResetPassword = ({ token, onBackToLogin }) => {
 
   const validateToken = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/verify-reset-token`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/verify-reset-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
@@ -49,7 +64,7 @@ const ResetPassword = ({ token, onBackToLogin }) => {
     setLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      const response = await fetchWithRetry(`${API_BASE_URL}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password })
